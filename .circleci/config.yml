@@ -3,7 +3,7 @@ version: 2.1
 orbs:
   slack: circleci/slack@4.12.1
 
-# commands:
+commands:
   notify_on_success:
       steps:
         - slack/notify:
