@@ -115,7 +115,7 @@ scan-backend:
   steps:
     - checkout
     - restore_cache:
-          keys: [backend-build]
+        keys: [backend-build]
     - run:
         name: scan back-end
         command: |
