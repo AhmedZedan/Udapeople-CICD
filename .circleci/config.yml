@@ -365,7 +365,7 @@ jobs:
             --query 'Reservations[*].Instances[*].PublicIpAddress' \
             --output text)
             export API_URL=http://${BACKEND_PUBLIC_IP}:3030
-            if curl -s $API_URL/api/status
+            if curl -s ${API_URL}/api/status | grep "ok"
             then
                 exit 0
             else
@@ -383,7 +383,7 @@ jobs:
             fi
       - destroy-environment
       - revert-migrations
-
+      
 #   cloudfront-update:
 #     docker:
 #       # Docker image here that supports AWS CLI
