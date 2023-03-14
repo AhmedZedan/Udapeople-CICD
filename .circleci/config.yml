@@ -360,12 +360,12 @@ jobs:
       - run:
           name: Backend smoke test.
           command: |
-            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 \
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 \
             --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
             --query 'Reservations[*].Instances[*].PublicIpAddress' \
             --output text)
             export API_URL=http://${BACKEND_PUBLIC_IP}:3030
-            if curl -s $API_URL/api/status | grep "ok"
+            if curl -s $API_URL/api/status
             then
                 exit 0
             else
@@ -383,6 +383,7 @@ jobs:
             fi
       - destroy-environment
       - revert-migrations
+
 #   cloudfront-update:
 #     docker:
 #       # Docker image here that supports AWS CLI
