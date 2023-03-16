@@ -187,44 +187,39 @@ jobs:
 
   deploy-infrastructure:
     docker:
-      - image: cimg/base:stable
+      - image: cimg/python:3.10
     steps:
       - checkout
       - install_awscli
-      - run:
-          name: Install dependencies
-          command: |
-            sudo apt install -y tar gzip
       - run:
           name: Ensure back-end infrastructure exists
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/backend.yml \
               --tags project=udapeople \
-              --stack-name "backend" \
-              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:7}
-
+              --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
       - run:
           name: Ensure front-end infrastructure exist
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/frontend.yml \
               --tags project=udapeople \
-              --stack-name "frontend-${CIRCLE_WORKFLOW_ID:0:7}" \
-              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"
+              --stack-name "udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
       - run:
           name: Add back-end ip to ansible inventory
           command: |
-            aws ec2 describe-instances --region us-east-1 \
+            aws ec2 describe-instances \
+            --region us-east-1 \
             --query 'Reservations[*].Instances[*].PublicIpAddress' \
             --output text >> .circleci/ansible/inventory.txt
-
       - persist_to_workspace:
           root: ~/
           paths:
             - project/.circleci/ansible/inventory.txt
       - notify_on_failure
-      # - notify_on_success
+      - notify_on_success
       - destroy-environment   
 
   configure-infrastructure:
@@ -232,9 +227,7 @@ jobs:
         - image: cimg/base:stable
       steps:
         - checkout
-        - install_awscli
         - install_ansible
-        - install_nodejs
         - add_ssh_keys:
             fingerprints: ["da:91:c7:44:f9:c1:b4:2a:9d:21:0d:1c:d5:f5:60:54"]
         - attach_workspace:
@@ -243,9 +236,6 @@ jobs:
             name: Configure Server
             command: |
               cd .circleci/ansible
-              aws ec2 describe-instances --region us-east-1 \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text >> inventory.txt
               cat inventory.txt
               ansible-playbook -i inventory.txt configure-server.yml
         - notify_on_failure
@@ -267,7 +257,6 @@ jobs:
             export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
             cd backend
             npm install
-            npm run premigrations
             npm run migrations > migrations_dump.txt
             cat migrations_dump.txt  
       - run:
@@ -315,36 +304,45 @@ jobs:
       - revert-migrations      
                     
   deploy-backend:
-    docker:
-      - image: mareimorsy/aws-node
-    steps:
-      - checkout
-      - add_ssh_keys:
-          fingerprints: ["0d:a0:d2:30:e7:40:31:70:0e:69:45:04:ad:36:0b:8c"]
-      - run:
-          name: Deploy backend
-          command: |
-            export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-            echo $TYPEORM_HOST >> .circleci/ansible/inventory.txt
-
-            cd backend
-            npm i
-            npm run build
-            echo "TYPEORM_ENTITIES=./dist/modules/domain/**/*.entity{.ts,.js}" > .env
-            echo "TYPEORM_HOST=${TYPEORM_HOST}" >> .env
-            echo "TYPEORM_PORT=${TYPEORM_PORT}" >> .env
-            echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> .env
-            echo "TYPEORM_PASSWORD=${TYPEORM_PASSWORD}" >> .env
-            echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> .env
-            echo "TYPEORM_MIGRATIONS_DIR=./dist/migrations" >> .env
-            echo "TYPEORM_MIGRATIONS=./dist/migrations/*.ts" >> .env
-            tar -czf artifact.tar.gz dist/* package* .env
-            cp artifact.tar.gz ~/project/.circleci/ansible/roles/deploy/artifact.tar.gz
-            ls ../.circleci/ansible/roles/deploy/
-            cd ../.circleci/ansible
-            ansible-playbook -i inventory.txt deploy-backend.yml
-      - destroy-environment
-      - revert-migrations  
+        docker:
+          - image: cimg/base:stable
+        steps:
+          - checkout
+          - install_awscli
+          - install_ansible
+          - install_nodejs
+          - add_ssh_keys:
+              fingerprints: ["da:91:c7:44:f9:c1:b4:2a:9d:21:0d:1c:d5:f5:60:54"]
+          - attach_workspace:
+              at: ~/
+          - restore_cache:
+              keys: [backend-deps]
+          - run:
+              name: Install dependencies
+              command: |
+                cd backend
+                npm install
+          - run:
+              name: Package Backend
+              command: |
+                cd backend
+                npm run build
+                tar -czf artifact.tar.gz dist/* package*
+                cd ..
+                cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+          - run:
+              name: Deploy backend
+              command: |
+                export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
+                echo $TYPEORM_HOST >> .circleci/ansible/inventory.txt
+                export TYPEORM_MIGRATIONS_DIR=./migrations
+                export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+                export TYPEORM_MIGRATIONS=./migrations/*.ts
+                cd .circleci/ansible
+                cat inventory.txt
+                ansible-playbook -i inventory.txt deploy-backend.yml
+          - destroy-environment
+          - revert-migrations  
 
   smoke-test:
     docker:
@@ -418,18 +416,18 @@ jobs:
 workflows:
   default:
     jobs:
-      # - build-frontend
-      # - build-backend
-      # - test-frontend:
-      #     requires: [build-frontend]
-      # - test-backend:
-      #     requires: [build-backend]
-      # - scan-backend:
-      #     requires: [build-backend]
-      # - scan-frontend:
-      #     requires: [build-frontend]
+      - build-frontend
+      - build-backend
+      - test-frontend:
+          requires: [build-frontend]
+      - test-backend:
+          requires: [build-backend]
+      - scan-backend:
+          requires: [build-backend]
+      - scan-frontend:
+          requires: [build-frontend]
       - deploy-infrastructure:
-      #     requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches: 
               only: [main]
@@ -437,8 +435,8 @@ workflows:
           requires: [deploy-infrastructure]
       - run-migrations:
           requires: [configure-infrastructure]
-      # - deploy-frontend:
-      #     requires: [run-migrations]
+      - deploy-frontend:
+          requires: [run-migrations]
       - deploy-backend:
           requires: [run-migrations]
       # - smoke-test:
