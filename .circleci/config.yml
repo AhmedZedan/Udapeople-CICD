@@ -106,7 +106,6 @@ jobs:
           paths: [frontend/node_modules]
           key: frontend-build
       - notify_on_failure
-      - notify_on_success
 
   build-backend:
     docker:
@@ -125,7 +124,6 @@ jobs:
           paths: [backend/node_modules]
           key: backend-build
       - notify_on_failure
-      - notify_on_success
 
   test-frontend:
     docker:
@@ -141,7 +139,6 @@ jobs:
             npm install
             npm test
       - notify_on_failure
-      - notify_on_success
                 
   test-backend:
     docker:
@@ -157,7 +154,6 @@ jobs:
             npm install
             npm test
       - notify_on_failure
-      - notify_on_success
             
   scan-frontend:
       docker:
@@ -173,7 +169,6 @@ jobs:
               npm install
               npm audit fix --force --audit-level=critical
         - notify_on_failure
-        - notify_on_success
 
   scan-backend:
     docker:
@@ -189,7 +184,6 @@ jobs:
             npm install
             npm audit fix --force --audit-level=critical
       - notify_on_failure
-      - notify_on_success
 
   deploy-infrastructure:
     docker:
