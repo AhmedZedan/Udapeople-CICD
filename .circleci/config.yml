@@ -197,20 +197,23 @@ jobs:
             aws cloudformation deploy \
               --template-file .circleci/files/backend.yml \
               --tags project=udapeople \
-              --stack-name "backend" \
-              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:5}
+              --stack-name "udapeople-backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
       - run:
           name: Ensure front-end infrastructure exist
           command: |
             aws cloudformation deploy \
               --template-file .circleci/files/frontend.yml \
               --tags project=udapeople \
-              --stack-name "frontend-${CIRCLE_WORKFLOW_ID:0:5}" \
-              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:5}"
+              --stack-name "udapeople-frontend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --parameter-overrides ID="${CIRCLE_WORKFLOW_ID:0:7}"  
       - run:
           name: Add back-end ip to ansible inventory
           command: |
-            aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text >> .circleci/ansible/inventory.txt
+            aws ec2 describe-instances \
+            --region us-east-1 \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+            --output text >> .circleci/ansible/inventory.txt
       - persist_to_workspace:
           root: ~/
           paths:
@@ -233,10 +236,6 @@ jobs:
             name: Configure Server
             command: |
               cd .circleci/ansible
-              aws ec2 describe-instances --region us-east-1 \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text >> inventory.txt
-
               cat inventory.txt
               ansible-playbook -i inventory.txt configure-server.yml
         - notify_on_failure
@@ -255,13 +254,19 @@ jobs:
       - run:
           name: Run migrations
           command: |
-            export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
             cd backend
             npm install
-            npm run premigrations
-            npm run migrations
-
-            
+            npm run migrations > migrations_dump.txt
+            cat migrations_dump.txt  
+      - run:
+          name: Send migration status to kvdb.io
+          command: |
+            if grep -q "has been executed successfully." ~/project/backend/migrations_dump.txt
+            then
+              curl https://kvdb.io/${KVDB_BUCKET}/migration_${CIRCLE_WORKFLOW_ID:0:7}  -d '1'
+            else
+              echo "No migrations are pending" 
+            fi
       - destroy-environment
       - revert-migrations
 
@@ -272,18 +277,28 @@ jobs:
       - checkout
       - install_awscli
       - install_nodejs
+      - restore_cache:
+          keys: [frontend-build]
+      - run:
+          name: Install dependencies
+          command: |
+            cd frontend
+            npm install
       - run:
           name: Get backend url
           command: |
-            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-             echo "API_URL=http://$BACKEND_PUBLIC_IP:3030" 
-            # Build the frontend
+            BACKEND_PUBLIC_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text)
+            echo "API_URL=http://${BACKEND_PUBLIC_IP}:3030" >> frontend/.env
+            cat frontend/.env
+      - run:
+          name: Deploy frontend objects
+          command: |
             cd frontend
-            echo "API_URL=http://$BACKEND_PUBLIC_IP:3030" > .env
-            npm install
-            npm run build:prod
-            # aws s3 sync dist s3://udapeople-project
-            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:5} --recursive
+            npm run build
+            aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --recursive
       - destroy-environment
       - revert-migrations      
                     
@@ -307,25 +322,21 @@ jobs:
                 cd backend
                 npm install
           - run:
+              name: Package Backend
+              command: |
+                cd backend
+                npm run build
+                tar -czf artifact.tar.gz dist/* package*
+                cd ..
+                cp backend/artifact.tar.gz .circleci/ansible/roles/deploy/files
+          - run:
               name: Deploy backend
               command: |
-                export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-                echo $TYPEORM_HOST >> .circleci/ansible/inventory.txt
-                cd backend
-                npm i
-                npm run build
-                echo "TYPEORM_ENTITIES=./dist/modules/domain/**/*.entity{.ts,.js}" > .env
-                echo "TYPEORM_HOST=${TYPEORM_HOST}" >> .env
-                echo "TYPEORM_PORT=${TYPEORM_PORT}" >> .env
-                echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> .env
-                echo "TYPEORM_PASSWORD=${TYPEORM_PASSWORD}" >> .env
-                echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> .env
-                echo "TYPEORM_MIGRATIONS_DIR=./dist/migrations" >> .env
-                echo "TYPEORM_MIGRATIONS=./dist/migrations/*.ts" >> .env
-                tar -czf artifact.tar.gz dist/* package* .env
-                cp artifact.tar.gz ~/project/.circleci/ansible/roles/deploy/artifact.tar.gz
-                ls ../.circleci/ansible/roles/deploy/
-                cd ../.circleci/ansible
+                export TYPEORM_MIGRATIONS_DIR=./migrations
+                export TYPEORM_ENTITIES=./modules/domain/**/*.entity{.ts,.js}
+                export TYPEORM_MIGRATIONS=./migrations/*.ts
+                cd .circleci/ansible
+                cat inventory.txt
                 ansible-playbook -i inventory.txt deploy-backend.yml
           - destroy-environment
           - revert-migrations  
@@ -423,8 +434,8 @@ workflows:
           requires: [configure-infrastructure]
       # - deploy-frontend:
       #     requires: [run-migrations]
-      - deploy-backend:
-          requires: [run-migrations]
+      # - deploy-backend:
+      #     requires: [run-migrations]
       # - smoke-test:
       #     requires: [deploy-backend, deploy-frontend]
       # - cloudfront-update:
