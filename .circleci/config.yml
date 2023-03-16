@@ -232,7 +232,9 @@ jobs:
         - image: cimg/base:stable
       steps:
         - checkout
+        - install_awscli
         - install_ansible
+        - install_nodejs
         - add_ssh_keys:
             fingerprints: ["da:91:c7:44:f9:c1:b4:2a:9d:21:0d:1c:d5:f5:60:54"]
         - attach_workspace:
