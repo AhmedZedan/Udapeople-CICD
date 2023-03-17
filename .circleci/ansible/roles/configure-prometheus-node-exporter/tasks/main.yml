@@ -16,6 +16,7 @@
   become: True
   shell:
     cmd: "ls"
+
 # - name: "move binary to /usr/local/bin."
 #   become: true
 #   copy:
