@@ -18,7 +18,8 @@
     npm i
 - name: Start the app
   shell: |
-    sudo pm2 stop default
+    cd backend
+    node dist/main.js &
     sudo pm2 start -f /home/ubuntu/backend/dist/main.js
 
 # - name: Enable pm2
