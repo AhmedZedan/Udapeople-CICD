@@ -285,14 +285,18 @@ jobs:
     steps:
       - checkout
       - install_awscli
+      - install_ansible
       - install_nodejs
       - restore_cache:
           keys: [frontend-build]
       - run:
           name: Install dependencies
           command: |
-            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-             echo "API_URL=http://$BACKEND_PUBLIC_IP:3030" 
+            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 \
+            --query 'Reservations[*].Instances[*].PublicIpAddress' \
+            --output text)
+            
+            echo "API_URL=http://$BACKEND_PUBLIC_IP:3030" 
             cd frontend
             echo "API_URL=http://$BACKEND_PUBLIC_IP:3030" > .env
             npm install
