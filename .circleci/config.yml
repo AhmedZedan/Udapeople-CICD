@@ -281,9 +281,11 @@ jobs:
 
   deploy-frontend:
     docker:
-      - image: mareimorsy/aws-node
+      - image: cimg/base:stable
     steps:
       - checkout
+      - install_awscli
+      - install_nodejs 
       - run:
           name: Deploy Frontend
           command: |
@@ -361,7 +363,6 @@ jobs:
             then
               exit 0
             else
-              echo ${BACKEND_PUBLIC_IP}
               exit 1
             fi
       - destroy-environment
@@ -369,9 +370,12 @@ jobs:
       
   cloudfront-update:
     docker:
-      - image: mareimorsy/aws-node
+      - image: cimg/base:stable
     steps:
       - checkout
+      - install_awscli
+      - install_ansible
+      - install_nodejs
       - run:
           name: Save Old Workflow ID to kvdb.io
           command: |
@@ -413,8 +417,8 @@ jobs:
 workflows:
   default:
     jobs:
-      # - build-frontend
-      # - build-backend
+      - build-frontend
+      - build-backend
       # - test-frontend:
       #     requires: [build-frontend]
       # - test-backend:
@@ -423,22 +427,22 @@ workflows:
       #     requires: [build-backend]
       # - scan-frontend:
       #     requires: [build-frontend]
-      - deploy-infrastructure:
-          # requires: [test-frontend, test-backend, scan-frontend, scan-backend]
-          filters:
-            branches: 
-              only: [main]
-      - configure-infrastructure:
-          requires: [deploy-infrastructure]
-      - run-migrations:
-          requires: [configure-infrastructure]
-      - deploy-frontend:
-          requires: [run-migrations]
-      - deploy-backend:
-          requires: [run-migrations]
-      - smoke-test:
-          requires: [deploy-backend, deploy-frontend]
-      - cloudfront-update:
-          requires: [smoke-test]
+      # - deploy-infrastructure:
+      #     requires: [test-frontend, test-backend, scan-frontend, scan-backend]
+      #     filters:
+      #       branches: 
+      #         only: [main]
+      # - configure-infrastructure:
+      #     requires: [deploy-infrastructure]
+      # - run-migrations:
+      #     requires: [configure-infrastructure]
+      # - deploy-frontend:
+      #     requires: [run-migrations]
+      # - deploy-backend:
+      #     requires: [run-migrations]
+      # - smoke-test:
+      #     requires: [deploy-backend, deploy-frontend]
+      # - cloudfront-update:
+      #     requires: [smoke-test]
       # - cleanup:
       #     requires: [cloudfront-update]
