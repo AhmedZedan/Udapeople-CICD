@@ -279,7 +279,7 @@ jobs:
       - destroy-environment
       - revert-migrations
 
-  ddeploy-frontend:
+  deploy-frontend:
     docker:
       - image: mareimorsy/aws-node
     steps:
